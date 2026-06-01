@@ -133,6 +133,33 @@ class OKXPerpetualWebUtilsTest(unittest.TestCase):
 
         self.assertTrue(2, len(api_factory._rest_pre_processors))
 
+    def test_build_api_factory_default_domain_has_no_simulated_pre_processor(self):
+        api_factory = web_utils.build_api_factory(
+            time_synchronizer=TimeSynchronizer(),
+            time_provider=lambda: None,
+        )
+        self.assertFalse(
+            any(isinstance(p, web_utils.SimulatedTradingRESTPreProcessor)
+                for p in api_factory._rest_pre_processors)
+        )
+
+    def test_build_api_factory_demo_domain_adds_simulated_pre_processor(self):
+        api_factory = web_utils.build_api_factory(
+            time_synchronizer=TimeSynchronizer(),
+            time_provider=lambda: None,
+            domain=CONSTANTS.DEMO_DOMAIN,
+        )
+        self.assertTrue(
+            any(isinstance(p, web_utils.SimulatedTradingRESTPreProcessor)
+                for p in api_factory._rest_pre_processors)
+        )
+
+    def test_simulated_trading_rest_pre_processor_injects_header(self):
+        pre_processor = web_utils.SimulatedTradingRESTPreProcessor()
+        request: RESTRequest = RESTRequest(method=RESTMethod.GET, url="/TEST_URL")
+        result_request: RESTRequest = self.async_run_with_timeout(pre_processor.pre_process(request))
+        self.assertEqual("1", result_request.headers["x-simulated-trading"])
+
     def test_get_pair_specific_limit_id(self):
         limit_id = web_utils.get_pair_specific_limit_id("GET",
                                                         "test/endpoint",
