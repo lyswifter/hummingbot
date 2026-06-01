@@ -26,6 +26,7 @@
   - [5. 真·HFT 的出手信号目录](#5-真hft-的出手信号目录)
   - [6. 两种出手姿势:maker vs taker](#6-两种出手姿势maker-vs-taker)
   - [7. 为什么判断必须极简](#7-为什么判断必须极简)
+- [第三部分:主流加密交易所撮合地理格局](#第三部分主流加密交易所撮合地理格局)
 - [TL;DR 速记](#tldr-速记)
 - [延伸研究方向](#延伸研究方向)
 - [来源](#来源)
@@ -213,6 +214,41 @@ V1 的 `amm_arb.py:215-228` 同理:只保留 `profit_pct >= min_profitability` �
 ## 7. 为什么判断必须极简
 
 真·HFT 里,"值得不值得"要在**纳秒级**做完,否则机会就没了。所以热路径里**不能跑复杂模型**,只能是**预算好的查表、整数比较、加减法**(阈值、价差、imbalance 比值)。复杂的 alpha 模型在**离线**算好,压缩成几个阈值/系数,在线只做"比较"。这也是为什么决策逻辑常落到 FPGA——简单到可以固化成电路。
+
+---
+
+# 第三部分:主流加密交易所撮合地理格局
+
+加密所不像传统交易所(NYSE Mahwah)有公开的自有机房,它们大多跑在**公有云**上。多数所不公开撮合精确位置,以下来自数据商(Tardis.dev)、官方公告与第三方延迟测试——通常行情网关与撮合引擎就近部署,可作为位置代理。
+
+| 交易所 | 云 / 机房 | 区域 | 备注 |
+|---|---|---|---|
+| **Binance** | AWS | 东京 `ap-northeast-1` | 撮合在东京;行情亦见 GCP 东京 |
+| **OKX** | 阿里云 | 香港 `cn-hongkong` | 交易系统官方称托管阿里云香港;co-lo 行情走 AWS 香港 `awscolows1.okx.com` |
+| **Bybit** | AWS | 新加坡 `ap-southeast-1` | Global Switch Singapore |
+| **Deribit** | Equinix LD4 + AWS | 伦敦 / 东京 | 期权龙头,现属 Coinbase;LD4 交叉连接 + AWS 伦敦/东京区域 |
+| **Coinbase Derivatives** | Equinix CH4 + NY5 | 芝加哥 / 新泽西 | 受 CFTC 监管,用**传统金融机房**(350 E Cermak);AWS us-east PrivateLink |
+| **dYdX v4 / Hyperliquid** | 链上(验证者节点) | 分布式 | DEX,无单一机房;订单簿在 validator 内存,链上结算 |
+
+## 地理格局解读
+
+- **亚太三极**:东京(Binance)、新加坡(Bybit)、香港(OKX)——亚洲是加密交易量核心,这三地的 AWS/阿里云区域成熟。
+- **欧美**:伦敦(Deribit LD4)、美国(Coinbase 衍生品在芝加哥/新泽西)。
+- **一个有意思的分野**:纯加密 CEX 用**公有云**(亚太为主);而**受监管**的美国衍生品(Coinbase Derivatives)用**传统金融机房 Equinix CH4**——和 CME 同处芝加哥 350 E Cermak。监管属性决定了基础设施选型。
+- **DEX**(dYdX v4、Hyperliquid)撮合在链上验证者,根本没有"机房"概念,延迟由共识机制而非物理距离主导。
+
+## 实用结论:想低延迟接哪个所,就部署在哪
+
+| 目标交易所 | 推荐部署 |
+|---|---|
+| Binance | AWS 东京 `ap-northeast-1` |
+| OKX | AWS / 阿里云 香港 `ap-east-1` / `cn-hongkong` |
+| Bybit | AWS 新加坡 `ap-southeast-1` |
+| Deribit | AWS 伦敦 / 东京 |
+
+这是加密领域"够得着"的 co-location——同区域同可用区(配合 AWS EC2 cluster placement group),往返可进个位数毫秒甚至亚毫秒,不需要传统 HFT 那种百万美元级专线投入。
+
+> **来源**:[OKX 官推(AliCloud HK)](https://x.com/okx/status/1235490699975540737) · [Binance Spot 行情位置(Tardis.dev)](https://docs.tardis.dev/historical-data-details/binance) · [Deribit Server Infrastructure](https://www.deribit.com/kb/server-infrastructure) · [Coinbase Derivatives Connectivity](https://docs.cdp.coinbase.com/derivatives/introduction/connectivity) · [Crypto market-making latency & EC2 placement groups (AWS)](https://aws.amazon.com/blogs/industries/crypto-market-making-latency-and-amazon-ec2-shared-placement-groups/)
 
 ---
 
