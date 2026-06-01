@@ -53,6 +53,15 @@ class OKXConfigMap(BaseConnectorConfigMap):
             "prompt_on_new": True,
         }
     )
+    okx_use_demo_trading: bool = Field(
+        default=False,
+        json_schema_extra={
+            "prompt": "Do you want to connect to the OKX demo (simulated) trading environment? (Yes/No) "
+                      "Requires API keys created in the OKX demo trading section.",
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
 
 
 KEYS = OKXConfigMap.model_construct()

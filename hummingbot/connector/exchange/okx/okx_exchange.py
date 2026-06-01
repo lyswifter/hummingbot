@@ -34,7 +34,8 @@ class OkxExchange(ExchangePyBase):
                  rate_limits_share_pct: Decimal = Decimal("100"),
                  trading_pairs: Optional[List[str]] = None,
                  trading_required: bool = True,
-                 okx_registration_sub_domain: str = "www"):
+                 okx_registration_sub_domain: str = "www",
+                 okx_use_demo_trading: bool = False):
         """
         :param okx_registration_sub_domain: The subdomain to use - options are "www" (default), "app" (US users), or "my" (EEA users)
                               See: https://github.com/ccxt/ccxt/issues/24601
@@ -43,6 +44,7 @@ class OkxExchange(ExchangePyBase):
         self.okx_secret_key = okx_secret_key
         self.okx_passphrase = okx_passphrase
         self.okx_registration_sub_domain = okx_registration_sub_domain or "www"
+        self._okx_use_demo_trading = okx_use_demo_trading
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
         super().__init__(balance_asset_limit, rate_limits_share_pct)
@@ -66,6 +68,10 @@ class OkxExchange(ExchangePyBase):
     @property
     def domain(self):
         return CONSTANTS.get_okx_base_url(self.okx_registration_sub_domain)
+
+    @property
+    def okx_use_demo_trading(self) -> bool:
+        return bool(self._okx_use_demo_trading)
 
     @property
     def client_order_id_max_length(self):
@@ -127,7 +133,8 @@ class OkxExchange(ExchangePyBase):
             throttler=self._throttler,
             time_synchronizer=self._time_synchronizer,
             auth=self._auth,
-            domain=self.domain)
+            domain=self.domain,
+            use_demo_trading=self.okx_use_demo_trading)
 
     def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:
         return OkxAPIOrderBookDataSource(

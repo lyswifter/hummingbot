@@ -17,14 +17,23 @@ subdomain_to_api_subdomain = {
     "my": "eea"
 }
 
+# Demo (simulated) trading.
+# OKX demo trading shares the same REST base URL as live trading, but every request must carry the
+# "x-simulated-trading: 1" header, and the WebSocket connections use a dedicated host.
+# See https://www.okx.com/docs-v5/en/#overview-demo-trading-services
+SIMULATED_TRADING_HEADERS = {"x-simulated-trading": "1"}
+DEMO_TRADING_WS_URL = "wss://wspap.okx.com:8443"
+
 
 def get_okx_base_url(sub_domain: str) -> str:
     """Returns OKX REST base URL based on API subdomain ("www", "us", "eea")"""
     return f"https://{subdomain_to_api_subdomain[sub_domain]}.okx.com/"
 
 
-def get_ws_url(sub_domain: str) -> str:
+def get_ws_url(sub_domain: str, use_demo_trading: bool = False) -> str:
     """Returns OKX WebSocket base URL based on API subdomain ("www", "us", "eea")"""
+    if use_demo_trading:
+        return DEMO_TRADING_WS_URL
     if sub_domain == "www":
         return "wss://ws.okx.com:8443"
     else:
@@ -34,12 +43,14 @@ def get_ws_url(sub_domain: str) -> str:
 DEFAULT_DOMAIN = get_okx_base_url("www")
 
 
-def get_okx_ws_uri_public(sub_domain):
-    return f"{get_ws_url(sub_domain)}/ws/v5/public"
+def get_okx_ws_uri_public(sub_domain, use_demo_trading: bool = False):
+    suffix = "?brokerId=9999" if use_demo_trading else ""
+    return f"{get_ws_url(sub_domain, use_demo_trading)}/ws/v5/public{suffix}"
 
 
-def get_okx_ws_uri_private(sub_domain):
-    return f"{get_ws_url(sub_domain)}/ws/v5/private"
+def get_okx_ws_uri_private(sub_domain, use_demo_trading: bool = False):
+    suffix = "?brokerId=9999" if use_demo_trading else ""
+    return f"{get_ws_url(sub_domain, use_demo_trading)}/ws/v5/private{suffix}"
 
 
 # REST API endpoints

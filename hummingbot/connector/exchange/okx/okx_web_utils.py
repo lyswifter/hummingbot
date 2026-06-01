@@ -6,7 +6,8 @@ from hummingbot.connector.time_synchronizer import TimeSynchronizer
 from hummingbot.connector.utils import TimeSynchronizerRESTPreProcessor
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
 from hummingbot.core.web_assistant.auth import AuthBase
-from hummingbot.core.web_assistant.connections.data_types import RESTMethod
+from hummingbot.core.web_assistant.connections.data_types import RESTMethod, RESTRequest
+from hummingbot.core.web_assistant.rest_pre_processors import RESTPreProcessorBase
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
 
 
@@ -26,24 +27,37 @@ def private_rest_url(path_url: str, domain: str = CONSTANTS.DEFAULT_DOMAIN) -> s
     return public_rest_url(path_url, domain)
 
 
+class OKXSimulatedTradingRESTPreProcessor(RESTPreProcessorBase):
+    """Injects the OKX demo (simulated) trading header into every REST request."""
+
+    async def pre_process(self, request: RESTRequest) -> RESTRequest:
+        request.headers = request.headers or {}
+        request.headers.update(CONSTANTS.SIMULATED_TRADING_HEADERS)
+        return request
+
+
 def build_api_factory(
         throttler: Optional[AsyncThrottler] = None,
         time_synchronizer: Optional[TimeSynchronizer] = None,
         time_provider: Optional[Callable] = None,
         auth: Optional[AuthBase] = None,
-        domain: str = CONSTANTS.DEFAULT_DOMAIN) -> WebAssistantsFactory:
+        domain: str = CONSTANTS.DEFAULT_DOMAIN,
+        use_demo_trading: bool = False) -> WebAssistantsFactory:
     throttler = throttler or create_throttler()
     time_synchronizer = time_synchronizer or TimeSynchronizer()
     time_provider = time_provider or (lambda: get_current_server_time(
         throttler=throttler,
         domain=domain
     ))
+    rest_pre_processors = [
+        TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
+    ]
+    if use_demo_trading:
+        rest_pre_processors.append(OKXSimulatedTradingRESTPreProcessor())
     api_factory = WebAssistantsFactory(
         throttler=throttler,
         auth=auth,
-        rest_pre_processors=[
-            TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
-        ])
+        rest_pre_processors=rest_pre_processors)
     return api_factory
 
 

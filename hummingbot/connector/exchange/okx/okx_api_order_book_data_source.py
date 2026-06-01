@@ -202,7 +202,9 @@ class OkxAPIOrderBookDataSource(OrderBookTrackerDataSource):
         ws: WSAssistant = await self._api_factory.get_ws_assistant()
         async with self._api_factory.throttler.execute_task(limit_id=CONSTANTS.WS_CONNECTION_LIMIT_ID):
             await ws.connect(
-                ws_url=CONSTANTS.get_okx_ws_uri_public(sub_domain=self._connector.okx_registration_sub_domain),
+                ws_url=CONSTANTS.get_okx_ws_uri_public(
+                    sub_domain=self._connector.okx_registration_sub_domain,
+                    use_demo_trading=self._connector.okx_use_demo_trading),
                 message_timeout=CONSTANTS.SECONDS_TO_WAIT_TO_RECEIVE_MESSAGE)
         return ws
 
