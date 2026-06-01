@@ -27,6 +27,7 @@
   - [6. 两种出手姿势:maker vs taker](#6-两种出手姿势maker-vs-taker)
   - [7. 为什么判断必须极简](#7-为什么判断必须极简)
 - [第三部分:主流加密交易所撮合地理格局](#第三部分主流加密交易所撮合地理格局)
+- [第四部分:接入 OKX(阿里云香港)——量化与压低延迟](#第四部分接入-okx阿里云香港量化与压低延迟)
 - [TL;DR 速记](#tldr-速记)
 - [延伸研究方向](#延伸研究方向)
 - [来源](#来源)
@@ -252,6 +253,80 @@ V1 的 `amm_arb.py:215-228` 同理:只保留 `profit_pct >= min_profitability` �
 
 ---
 
+# 第四部分:接入 OKX(阿里云香港)——量化与压低延迟
+
+> 承接第三部分:OKX 撮合在阿里云香港。本部分是接入实操——先讲怎么**量化**延迟(测什么、用什么探针),再讲怎么按**收益排序压低**延迟。
+
+## 4.1 先量化:测不准就没法优化
+
+延迟要**分层测**,每层用不同探针。
+
+### ① 应用层 RTT —— OKX server-time 端点(Hummingbot 现成算法)
+
+`hummingbot/connector/time_synchronizer.py` 的 `update_server_time_offset_with_time_provider` 就是标准的 NTP / Cristian 式时钟偏移 + RTT 测量:
+
+```python
+local_before_ms = perf_counter() * 1e3        # 发请求前
+server_time_ms  = await time_provider          # OKX /api/v5/public/time
+local_after_ms  = perf_counter() * 1e3         # 收响应后
+midpoint    = (local_before_ms + local_after_ms) / 2   # 假设往返对称
+time_offset = server_time_ms - midpoint                 # 时钟偏移
+```
+
+两个关键量都在这三行里:
+- **RTT(往返延迟)= `local_after − local_before`** —— 你到 OKX 的应用层往返,量化延迟的核心(代码用它校时,同样的数就是 RTT)。
+- **时钟偏移 = `server − midpoint`** —— 用于校时(OKX 时间戳错会拒单,错误码 `50113`),也帮估单程延迟。
+
+工程细节:用 `perf_counter()`(单调时钟)而非 `time()`(墙钟会被 NTP 跳变);用 deque(5 样本)+ 中位数/加权平均抗抖动。
+
+> 精度:OKX server time 是**毫秒**级,offset 分辨率受此限制;亚毫秒优化靠下面的 WS 时间戳。
+
+### ② WebSocket ping/pong RTT(做市/HFT 真正关心)
+行情走 WS 长连接。OKX 支持 `ping`/`pong`(见 `okx_api_*_data_source` 的 `WSPlainTextRequest("ping")`):发 ping 打 `perf_counter`,收 pong 再打,差值即 WS RTT。
+
+### ③ 单程延迟 / 行情新鲜度(最该盯)
+OKX 每条行情/成交带毫秒 `ts`。`本地收到时刻 − ts` = 行情从撮合到你的单程延迟,反映"盘口有多旧"。前提:时钟同步好(PTP / Chrony 钉到微秒),否则测的是 offset + 延迟的混合。
+
+### ④ tick-to-trade(端到端)
+`发出订单的本地时刻 − 触发它那条行情的本地接收时刻`;再加下单往返 `发单 vs 收到 ack`。
+
+### ⑤ 网络层(定位用)
+交易所通常禁 ICMP → 用 TCP ping(连 443 的握手时间)、`mtr`(看每跳)。
+
+### 统计纪律:看百分位,不看平均
+记 **p50 / p99 / p99.9 / max** 和 jitter,用 HdrHistogram 存分布。平均值会骗人,**p99.9 的尖峰才吃掉你**。
+
+## 4.2 如何压低:按收益从大到小
+
+| Layer | 手段 | 收益 |
+|---|---|---|
+| **0 地理** | 服务器放**香港**(撮合同城) | 最大:几百 ms → 个位数 ms |
+| **1 同云/跨云** | 阿里云香港(同云)/ AWS 香港 `ap-east-1`(OKX co-lo 网关 `awscolows1`)/ OKX 官方 co-location | 大 |
+| **2 云内布局** | AWS cluster placement group、实测选最快 AZ、ENA/SR-IOV 增强网络 | 中 |
+| **3 连接** | WS 长连接复用(避免 TLS 握手 ~几十 ms)、专线(降抖动)、co-lo 端点 | 中 |
+| **4 网络栈** | **`TCP_NODELAY` 禁 Nagle**、kernel bypass(DPDK/Onload)、CPU pinning、busy-poll | 微秒级 |
+| **5 应用** | WS 推送 > REST 轮询、时间同步、**换 C++/Rust**(Python 是天花板) | 微秒级 |
+
+⚠️ **最易踩的坑**:不关 Nagle → 小订单包被 Nagle + delayed-ACK 攒到 **~40ms** 才发。
+
+## 4.3 延迟预算(接 OKX)
+
+| 部署 | 应用层 RTT | 适合 |
+|---|---|---|
+| 美 / 欧公网 | 150–250 ms | ❌ 套利必死 |
+| 香港公网 VPS | 5–30 ms | 一般策略 |
+| 阿里云 / AWS 香港同区域 | 1–5 ms | 做市、价差套利 |
+| + placement group + 调优 | 亚毫秒 ~ 1 ms | 较激进策略 |
+| OKX 官方 co-location | 数百 μs | 机构 / 准 HFT |
+
+## 4.4 Hummingbot 的现实
+
+Hummingbot 能吃到 **Layer 0–3**(放香港、长连接、选区域)——对秒级做市 / 资金费套利够用。但 **Layer 4–5(kernel bypass、语言)吃不到**,因为 Python + 1 秒 tick 是设计上限。**放香港 + 长连接 + 关 Nagle,就榨干了它的延迟潜力**;再往下要换技术栈。
+
+> **代码引用**:`hummingbot/connector/time_synchronizer.py`(RTT/offset 算法,第 57–70 行);OKX server-time 端点见 `okx_web_utils.get_current_server_time`;WS ping 见 `okx_api_order_book_data_source` / `okx_api_user_stream_data_source`。
+
+---
+
 ## TL;DR 速记
 
 1. **HFT = 和物理极限赛跑**:语言(无 GC 的 C++/Rust)→ kernel bypass(DPDK/Onload,μs)→ FPGA(tick-to-trade ~120ns)→ co-location(同机房+等长线缆)→ 城际微波专线(芝↔纽 ~4ms 单程)。
@@ -260,6 +335,7 @@ V1 的 `amm_arb.py:215-228` 同理:只保留 `profit_pct >= min_profitability` �
 4. **真实代码**:`arbitrage_executor.control_task` —— 每 tick 重算净利润,`> min_profitability` 才下单。
 5. **常见出手信号**:跨市场/三角套利、latency/stale quote、order book imbalance、micro-price、大单 sweep。
 6. **Hummingbot 的定位**:秒级自动化做市/套利,不是 HFT;但"阈值出手""imbalance"这些**概念是相通的**,只是时间尺度差 6~9 个数量级。
+7. **接 OKX 压延迟**:先放**香港**(同城,收益最大)→ 同云 / placement group → WS 长连接 + 关 Nagle;量化用 server-time RTT、WS ping/pong、行情 `ts` 单程延迟,**看 p99/p99.9 不看平均**。
 
 ## 延伸研究方向
 
