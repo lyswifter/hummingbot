@@ -19,6 +19,10 @@ REST_URLS = {DEFAULT_DOMAIN: "https://www.okx.com",
              AWS_DOMAIN: "https://aws.okx.com",
              DEMO_DOMAIN: "https://www.okx.com"}
 
+# Demo (simulated) trading requires every REST request to carry this header.
+# See https://www.okx.com/docs-v5/en/#overview-demo-trading-services
+SIMULATED_TRADING_HEADERS = {"x-simulated-trading": "1"}
+
 ACCOUNT_MODE = "Single-currency margin mode"
 # -------------------------------------------
 # DATA TYPES

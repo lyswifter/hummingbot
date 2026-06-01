@@ -81,3 +81,44 @@ class OkxPerpetualConfigMap(BaseConnectorConfigMap):
 
 
 KEYS = OkxPerpetualConfigMap.model_construct()
+
+
+OTHER_DOMAINS = ["okx_perpetual_demo"]
+OTHER_DOMAINS_PARAMETER = {"okx_perpetual_demo": "okx_perpetual_demo"}
+OTHER_DOMAINS_EXAMPLE_PAIR = {"okx_perpetual_demo": EXAMPLE_PAIR}
+OTHER_DOMAINS_DEFAULT_FEES = {"okx_perpetual_demo": DEFAULT_FEES}
+
+
+class OkxPerpetualDemoConfigMap(BaseConnectorConfigMap):
+    connector: str = "okx_perpetual_demo"
+    okx_perpetual_demo_api_key: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (simulated) trading API key",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    okx_perpetual_demo_secret_key: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (simulated) trading secret key",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    okx_perpetual_demo_passphrase: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (simulated) trading passphrase",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    model_config = ConfigDict(title="okx_perpetual_demo")
+
+
+OTHER_DOMAINS_KEYS = {"okx_perpetual_demo": OkxPerpetualDemoConfigMap.model_construct()}

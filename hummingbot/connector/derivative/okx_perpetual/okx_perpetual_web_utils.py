@@ -18,22 +18,35 @@ class HeadersContentRESTPreProcessor(RESTPreProcessorBase):
         return request
 
 
+class SimulatedTradingRESTPreProcessor(RESTPreProcessorBase):
+    """Injects the OKX demo (simulated) trading header into every REST request."""
+
+    async def pre_process(self, request: RESTRequest) -> RESTRequest:
+        request.headers = request.headers or {}
+        request.headers.update(CONSTANTS.SIMULATED_TRADING_HEADERS)
+        return request
+
+
 def build_api_factory(
         throttler: Optional[AsyncThrottler] = None,
         time_synchronizer: Optional[TimeSynchronizer] = None,
         time_provider: Optional[Callable] = None,
         auth: Optional[AuthBase] = None,
+        domain: str = CONSTANTS.DEFAULT_DOMAIN,
 ) -> WebAssistantsFactory:
     throttler = throttler or create_throttler()
     time_synchronizer = time_synchronizer or TimeSynchronizer()
-    time_provider = time_provider or (lambda: get_current_server_time(throttler=throttler, domain=CONSTANTS.DEFAULT_DOMAIN))
+    time_provider = time_provider or (lambda: get_current_server_time(throttler=throttler, domain=domain))
+    rest_pre_processors = [
+        TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
+        HeadersContentRESTPreProcessor(),
+    ]
+    if domain == CONSTANTS.DEMO_DOMAIN:
+        rest_pre_processors.append(SimulatedTradingRESTPreProcessor())
     api_factory = WebAssistantsFactory(
         throttler=throttler,
         auth=auth,
-        rest_pre_processors=[
-            TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
-            HeadersContentRESTPreProcessor(),
-        ],
+        rest_pre_processors=rest_pre_processors,
     )
     return api_factory
 

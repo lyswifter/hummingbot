@@ -161,6 +161,7 @@ class OkxPerpetualDerivative(PerpetualDerivativePyBase):
             throttler=self._throttler,
             time_synchronizer=self._time_synchronizer,
             auth=self._auth,
+            domain=self._domain,
         )
 
     def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:
@@ -188,7 +189,7 @@ class OkxPerpetualDerivative(PerpetualDerivativePyBase):
 
     def start(self, clock: Clock, timestamp: float):
         super().start(clock, timestamp)
-        if self._domain == CONSTANTS.DEFAULT_DOMAIN and self.is_trading_required:
+        if self._domain in (CONSTANTS.DEFAULT_DOMAIN, CONSTANTS.DEMO_DOMAIN) and self.is_trading_required:
             self.set_position_mode(PositionMode.HEDGE)
 
     async def start_network(self):
