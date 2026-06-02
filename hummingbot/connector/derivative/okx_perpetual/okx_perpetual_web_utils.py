@@ -12,9 +12,17 @@ from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFa
 
 
 class HeadersContentRESTPreProcessor(RESTPreProcessorBase):
+    def __init__(self, domain: str = CONSTANTS.DEFAULT_DOMAIN):
+        super().__init__()
+        self._domain = domain
+
     async def pre_process(self, request: RESTRequest) -> RESTRequest:
         request.headers = request.headers or {}
         request.headers.update({"Content-Type": "application/json"})
+        # OKX Demo Trading shares the production REST host and is selected purely via this header,
+        # so it must be present on every REST request (public and private) when using the demo domain.
+        if self._domain == CONSTANTS.DEMO_DOMAIN:
+            request.headers.update({"x-simulated-trading": "1"})
         return request
 
 
@@ -23,16 +31,17 @@ def build_api_factory(
         time_synchronizer: Optional[TimeSynchronizer] = None,
         time_provider: Optional[Callable] = None,
         auth: Optional[AuthBase] = None,
+        domain: str = CONSTANTS.DEFAULT_DOMAIN,
 ) -> WebAssistantsFactory:
     throttler = throttler or create_throttler()
     time_synchronizer = time_synchronizer or TimeSynchronizer()
-    time_provider = time_provider or (lambda: get_current_server_time(throttler=throttler, domain=CONSTANTS.DEFAULT_DOMAIN))
+    time_provider = time_provider or (lambda: get_current_server_time(throttler=throttler, domain=domain))
     api_factory = WebAssistantsFactory(
         throttler=throttler,
         auth=auth,
         rest_pre_processors=[
             TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
-            HeadersContentRESTPreProcessor(),
+            HeadersContentRESTPreProcessor(domain=domain),
         ],
     )
     return api_factory
@@ -130,8 +139,10 @@ def wss_linear_private_url(connector_variant_label: Optional[str]) -> str:
 def build_rate_limits(trading_pairs: Optional[List[str]] = None) -> List[RateLimit]:
     trading_pairs = trading_pairs or []
     rate_limits = []
-    domain = CONSTANTS.DEFAULT_DOMAIN
-    rate_limits.extend(_build_websocket_rate_limits(domain))
+    # Register websocket rate limits for every domain (production, AWS, demo) since the limit ids are the
+    # websocket URLs themselves and a demo connector connects to dedicated demo hosts.
+    for domain in CONSTANTS.WSS_PUBLIC_URLS:
+        rate_limits.extend(_build_websocket_rate_limits(domain))
     rate_limits.extend(_build_public_rate_limits())
     rate_limits.extend(_build_private_rate_limits(trading_pairs))
 

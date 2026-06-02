@@ -6,8 +6,27 @@ from hummingbot.connector.time_synchronizer import TimeSynchronizer
 from hummingbot.connector.utils import TimeSynchronizerRESTPreProcessor
 from hummingbot.core.api_throttler.async_throttler import AsyncThrottler
 from hummingbot.core.web_assistant.auth import AuthBase
-from hummingbot.core.web_assistant.connections.data_types import RESTMethod
+from hummingbot.core.web_assistant.connections.data_types import RESTMethod, RESTRequest
+from hummingbot.core.web_assistant.rest_pre_processors import RESTPreProcessorBase
 from hummingbot.core.web_assistant.web_assistants_factory import WebAssistantsFactory
+
+
+class SimulatedTradingRESTPreProcessor(RESTPreProcessorBase):
+    """Injects the OKX Demo Trading header on every REST request when simulated trading is enabled.
+
+    OKX Demo Trading shares the production REST host and is selected purely via this header, so it must be
+    present on every REST request (public and private) issued by a demo connector.
+    """
+
+    def __init__(self, simulated_trading: bool = False):
+        super().__init__()
+        self._simulated_trading = simulated_trading
+
+    async def pre_process(self, request: RESTRequest) -> RESTRequest:
+        if self._simulated_trading:
+            request.headers = request.headers or {}
+            request.headers.update({"x-simulated-trading": "1"})
+        return request
 
 
 def public_rest_url(path_url: str, domain: str = CONSTANTS.DEFAULT_DOMAIN) -> str:
@@ -31,7 +50,8 @@ def build_api_factory(
         time_synchronizer: Optional[TimeSynchronizer] = None,
         time_provider: Optional[Callable] = None,
         auth: Optional[AuthBase] = None,
-        domain: str = CONSTANTS.DEFAULT_DOMAIN) -> WebAssistantsFactory:
+        domain: str = CONSTANTS.DEFAULT_DOMAIN,
+        simulated_trading: bool = False) -> WebAssistantsFactory:
     throttler = throttler or create_throttler()
     time_synchronizer = time_synchronizer or TimeSynchronizer()
     time_provider = time_provider or (lambda: get_current_server_time(
@@ -43,6 +63,7 @@ def build_api_factory(
         auth=auth,
         rest_pre_processors=[
             TimeSynchronizerRESTPreProcessor(synchronizer=time_synchronizer, time_provider=time_provider),
+            SimulatedTradingRESTPreProcessor(simulated_trading=simulated_trading),
         ])
     return api_factory
 

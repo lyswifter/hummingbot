@@ -4,6 +4,7 @@ from typing import Any, Dict
 from pydantic import ConfigDict, Field, SecretStr
 
 from hummingbot.client.config.config_data_types import BaseConnectorConfigMap
+from hummingbot.connector.derivative.okx_perpetual import okx_perpetual_constants as CONSTANTS
 from hummingbot.connector.utils import split_hb_trading_pair
 from hummingbot.core.data_type.trade_fee import TradeFeeSchema
 
@@ -81,3 +82,46 @@ class OkxPerpetualConfigMap(BaseConnectorConfigMap):
 
 
 KEYS = OkxPerpetualConfigMap.model_construct()
+
+# OKX "Demo Trading" environment. It shares the same REST host as production and is selected via the
+# "x-simulated-trading: 1" header (see okx_perpetual_web_utils), and dedicated demo websocket hosts.
+# Demo trading requires API keys generated inside OKX's Demo Trading mode; production keys do not work.
+OTHER_DOMAINS = [CONSTANTS.DEMO_DOMAIN]
+OTHER_DOMAINS_PARAMETER = {CONSTANTS.DEMO_DOMAIN: CONSTANTS.DEMO_DOMAIN}
+OTHER_DOMAINS_EXAMPLE_PAIR = {CONSTANTS.DEMO_DOMAIN: "BTC-USDT"}
+OTHER_DOMAINS_DEFAULT_FEES = {CONSTANTS.DEMO_DOMAIN: [0.02, 0.05]}
+
+
+class OkxPerpetualDemoConfigMap(BaseConnectorConfigMap):
+    connector: str = "okx_perpetual_demo"
+    okx_perpetual_demo_api_key: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (paper trading) API key",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    okx_perpetual_demo_secret_key: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (paper trading) secret key",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    okx_perpetual_demo_passphrase: SecretStr = Field(
+        default=...,
+        json_schema_extra={
+            "prompt": "Enter your OKX Perpetual demo (paper trading) passphrase",
+            "is_secure": True,
+            "is_connect_key": True,
+            "prompt_on_new": True,
+        }
+    )
+    model_config = ConfigDict(title="okx_perpetual_demo")
+
+
+OTHER_DOMAINS_KEYS = {CONSTANTS.DEMO_DOMAIN: OkxPerpetualDemoConfigMap.model_construct()}

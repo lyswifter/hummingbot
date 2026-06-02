@@ -11,21 +11,29 @@ SECONDS_TO_WAIT_TO_RECEIVE_MESSAGE = 30 * 0.8
 # URL mapping based on where account is registered:
 # sourced from https://app.okx.com/docs-v5/en/#overview-account-mode and https://my.okx.com/docs-v5/en/#overview-account-mode
 
+# "demo" is OKX's Demo Trading (paper trading) environment. It shares the production REST host and is
+# selected via the "x-simulated-trading: 1" header, and uses a dedicated demo websocket host (wspap).
+DEMO_SUB_DOMAIN = "demo"
+
 subdomain_to_api_subdomain = {
     "www": "www",
     "app": "us",
-    "my": "eea"
+    "my": "eea",
+    # Demo Trading REST runs on the production host; the simulated-trading header is what routes it.
+    DEMO_SUB_DOMAIN: "www",
 }
 
 
 def get_okx_base_url(sub_domain: str) -> str:
-    """Returns OKX REST base URL based on API subdomain ("www", "us", "eea")"""
+    """Returns OKX REST base URL based on API subdomain ("www", "us", "eea", "demo")"""
     return f"https://{subdomain_to_api_subdomain[sub_domain]}.okx.com/"
 
 
 def get_ws_url(sub_domain: str) -> str:
-    """Returns OKX WebSocket base URL based on API subdomain ("www", "us", "eea")"""
-    if sub_domain == "www":
+    """Returns OKX WebSocket base URL based on API subdomain ("www", "us", "eea", "demo")"""
+    if sub_domain == DEMO_SUB_DOMAIN:
+        return "wss://wspap.okx.com:8443"
+    elif sub_domain == "www":
         return "wss://ws.okx.com:8443"
     else:
         return f"wss://ws{subdomain_to_api_subdomain[sub_domain]}.okx.com:8443"
@@ -35,11 +43,14 @@ DEFAULT_DOMAIN = get_okx_base_url("www")
 
 
 def get_okx_ws_uri_public(sub_domain):
-    return f"{get_ws_url(sub_domain)}/ws/v5/public"
+    # Demo websocket endpoints require the brokerId=9999 query parameter.
+    suffix = "?brokerId=9999" if sub_domain == DEMO_SUB_DOMAIN else ""
+    return f"{get_ws_url(sub_domain)}/ws/v5/public{suffix}"
 
 
 def get_okx_ws_uri_private(sub_domain):
-    return f"{get_ws_url(sub_domain)}/ws/v5/private"
+    suffix = "?brokerId=9999" if sub_domain == DEMO_SUB_DOMAIN else ""
+    return f"{get_ws_url(sub_domain)}/ws/v5/private{suffix}"
 
 
 # REST API endpoints

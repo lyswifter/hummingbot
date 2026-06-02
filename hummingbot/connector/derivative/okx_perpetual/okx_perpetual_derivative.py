@@ -161,6 +161,7 @@ class OkxPerpetualDerivative(PerpetualDerivativePyBase):
             throttler=self._throttler,
             time_synchronizer=self._time_synchronizer,
             auth=self._auth,
+            domain=self._domain,
         )
 
     def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:

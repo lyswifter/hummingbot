@@ -169,6 +169,39 @@ class OKXPerpetualWebUtilsTest(unittest.TestCase):
         self.assertIn("Content-Type", result_request.headers)
         self.assertEqual(result_request.headers["Content-Type"], "application/json")
 
+    def test_rest_pre_processor_adds_simulated_trading_header_for_demo_domain(self):
+        pre_processor = web_utils.HeadersContentRESTPreProcessor(domain=CONSTANTS.DEMO_DOMAIN)
+        request: RESTRequest = RESTRequest(method=RESTMethod.GET, url="/TEST_URL")
+        result_request: RESTRequest = self.async_run_with_timeout(pre_processor.pre_process(request))
+
+        self.assertEqual("1", result_request.headers["x-simulated-trading"])
+        self.assertEqual("application/json", result_request.headers["Content-Type"])
+
+    def test_rest_pre_processor_omits_simulated_trading_header_for_production_domain(self):
+        pre_processor = web_utils.HeadersContentRESTPreProcessor(domain=CONSTANTS.DEFAULT_DOMAIN)
+        request: RESTRequest = RESTRequest(method=RESTMethod.GET, url="/TEST_URL")
+        result_request: RESTRequest = self.async_run_with_timeout(pre_processor.pre_process(request))
+
+        self.assertNotIn("x-simulated-trading", result_request.headers)
+
+    def test_build_api_factory_with_demo_domain_injects_header(self):
+        api_factory = web_utils.build_api_factory(
+            time_synchronizer=TimeSynchronizer(),
+            time_provider=lambda: None,
+            domain=CONSTANTS.DEMO_DOMAIN,
+        )
+        header_pre_processors = [
+            p for p in api_factory._rest_pre_processors
+            if isinstance(p, web_utils.HeadersContentRESTPreProcessor)
+        ]
+        self.assertEqual(1, len(header_pre_processors))
+        self.assertEqual(CONSTANTS.DEMO_DOMAIN, header_pre_processors[0]._domain)
+
+    def test_build_rate_limits_registers_demo_websocket_limits(self):
+        limit_ids = {rate_limit.limit_id for rate_limit in web_utils.build_rate_limits([])}
+        self.assertIn(CONSTANTS.WSS_PUBLIC_URLS[CONSTANTS.DEMO_DOMAIN], limit_ids)
+        self.assertIn(CONSTANTS.WSS_PRIVATE_URLS[CONSTANTS.DEMO_DOMAIN], limit_ids)
+
     @aioresponses()
     def test_get_current_server_time(self, mock_api):
         response = {

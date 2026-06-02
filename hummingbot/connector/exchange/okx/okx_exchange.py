@@ -34,15 +34,20 @@ class OkxExchange(ExchangePyBase):
                  rate_limits_share_pct: Decimal = Decimal("100"),
                  trading_pairs: Optional[List[str]] = None,
                  trading_required: bool = True,
-                 okx_registration_sub_domain: str = "www"):
+                 okx_registration_sub_domain: str = "www",
+                 domain: Optional[str] = None):
         """
         :param okx_registration_sub_domain: The subdomain to use - options are "www" (default), "app" (US users), or "my" (EEA users)
                               See: https://github.com/ccxt/ccxt/issues/24601
+        :param domain: Supplied by AllConnectorSettings for sub-domain connector variants (e.g. "okx_demo").
+                       For OKX it carries the registration sub-domain selector (e.g. "demo" for Demo Trading)
+                       and takes precedence over ``okx_registration_sub_domain``. Note this is distinct from the
+                       ``domain`` property, which returns the full REST base URL derived from the sub-domain.
         """
         self.okx_api_key = okx_api_key
         self.okx_secret_key = okx_secret_key
         self.okx_passphrase = okx_passphrase
-        self.okx_registration_sub_domain = okx_registration_sub_domain or "www"
+        self.okx_registration_sub_domain = domain or okx_registration_sub_domain or "www"
         self._trading_required = trading_required
         self._trading_pairs = trading_pairs
         super().__init__(balance_asset_limit, rate_limits_share_pct)
@@ -127,7 +132,8 @@ class OkxExchange(ExchangePyBase):
             throttler=self._throttler,
             time_synchronizer=self._time_synchronizer,
             auth=self._auth,
-            domain=self.domain)
+            domain=self.domain,
+            simulated_trading=self.okx_registration_sub_domain == CONSTANTS.DEMO_SUB_DOMAIN)
 
     def _create_order_book_data_source(self) -> OrderBookTrackerDataSource:
         return OkxAPIOrderBookDataSource(
