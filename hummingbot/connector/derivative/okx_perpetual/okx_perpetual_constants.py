@@ -185,3 +185,11 @@ RET_CODE_API_KEY_INVALID = "50111"
 RET_CODE_INVALID_SIGNATURE = "50113"
 RET_CODE_CANCEL_FAILED_BECAUSE_ORDER_NOT_EXISTS = "51603"
 RET_CODE_ORDER_ALREADY_CANCELLED = "51401"
+# OKX returns this code when a cancellation cannot be performed because the order has already reached a
+# terminal state (filled / canceled) or is unknown to the exchange. It must be handled as "order not found"
+# during cancellation so lost orders are cleared instead of triggering an endless cancel-retry loop.
+RET_CODE_CANCEL_FAILED_BECAUSE_ORDER_FINALIZED = "51400"
+ORDER_FINALIZED_DURING_CANCELATION_MESSAGE = "has been filled, canceled or does not exist"
+# Marker used when an order status query comes back with an empty data list (the order is unknown to the
+# exchange). _request_order_status raises an error carrying this message so the order is treated as not found.
+ORDER_NOT_EXIST_MESSAGE = "Order does not exist"

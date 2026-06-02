@@ -113,19 +113,18 @@ class OkxExchange(ExchangePyBase):
         return is_time_synchronizer_related
 
     def _is_order_not_found_during_status_update_error(self, status_update_exception: Exception) -> bool:
-        # TODO: implement this method correctly for the connector
-        # The default implementation was added when the functionality to detect not found orders was introduced in the
-        # ExchangePyBase class. Also fix the unit test test_lost_order_removed_if_not_found_during_order_status_update
-        # when replacing the dummy implementation
-        return False
+        # OKX answers an order status query for an unknown order with HTTP 200 and an empty data list.
+        # _request_order_status turns that into an error carrying ORDER_NOT_EXIST_MESSAGE so the base class
+        # marks the order not found (and eventually clears lost orders) instead of re-polling it forever.
+        return CONSTANTS.ORDER_NOT_EXIST_MESSAGE in str(status_update_exception)
 
     def _is_order_not_found_during_cancelation_error(self, cancelation_exception: Exception) -> bool:
-        # TODO: implement this method correctly for the connector
-        # The default implementation was added when the functionality to detect not found orders was introduced in the
-        # ExchangePyBase class. Also fix the unit test test_cancel_order_not_found_in_the_exchange when replacing the
-        # dummy implementation
-        # _place_cancel already takes care of all expected exceptions.
-        return False
+        # OKX reports sCode 51603 ("Order does not exist") when a cancellation targets an unknown order.
+        # (sCodes 51400 / 51401 are already handled as a successful no-op cancel in _place_cancel.) Treat it as
+        # "order not found" so the base class clears lost orders instead of logging an error and retrying.
+        exception_str = str(cancelation_exception)
+        return (CONSTANTS.RET_CODE_ORDER_DOES_NOT_EXIST in exception_str
+                and CONSTANTS.ORDER_NOT_EXIST_MESSAGE in exception_str)
 
     def _create_web_assistants_factory(self) -> WebAssistantsFactory:
         return web_utils.build_api_factory(
@@ -389,7 +388,18 @@ class OkxExchange(ExchangePyBase):
     async def _request_order_status(self, tracked_order: InFlightOrder) -> OrderUpdate:
         updated_order_data = await self._request_order_update(order=tracked_order)
 
-        order_data = updated_order_data["data"][0]
+        data = updated_order_data.get("data", [])
+        if len(data) == 0:
+            # OKX answers with HTTP 200 and an empty data list when the order is unknown to the exchange
+            # (e.g. a lost order that was never accepted, or one already purged after a fill/cancel). Raise a
+            # recognizable not-found error so ExchangePyBase marks the order not found instead of bubbling an
+            # IndexError on data[0] and re-polling the same order on every cycle.
+            raise IOError(
+                f"{CONSTANTS.ORDER_NOT_EXIST_MESSAGE} (client_order_id: {tracked_order.client_order_id}, "
+                f"code: {updated_order_data.get('code')})"
+            )
+
+        order_data = data[0]
         new_state = CONSTANTS.ORDER_STATE[order_data["state"]]
 
         order_update = OrderUpdate(

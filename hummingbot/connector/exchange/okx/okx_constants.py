@@ -117,3 +117,11 @@ RATE_LIMITS = [
     RateLimit(limit_id=OKX_BALANCE_PATH, limit=10, time_interval=2),
     RateLimit(limit_id=OKX_TRADE_FILLS_PATH, limit=60, time_interval=2),
 ]
+
+# Markers used to detect "order not found" responses so lost orders are reconciled instead of looping.
+# _request_order_status raises an error carrying ORDER_NOT_EXIST_MESSAGE when an order status query returns an
+# empty data list (the order is unknown to the exchange), instead of bubbling an IndexError on data[0].
+ORDER_NOT_EXIST_MESSAGE = "Order does not exist"
+# OKX reports this code when a cancellation targets an order that is unknown to the exchange (sCodes 51400 /
+# 51401 are already handled as a successful no-op cancel in _place_cancel).
+RET_CODE_ORDER_DOES_NOT_EXIST = "51603"

@@ -603,16 +603,32 @@ class OkxExchangeTests(AbstractExchangeConnectorTests.ExchangeConnectorTests):
             self, order: InFlightOrder, mock_api: aioresponses,
             callback: Optional[Callable] = lambda *args, **kwargs: None
     ) -> str:
-        # Implement the expected not found response when enabling test_cancel_order_not_found_in_the_exchange
-        raise NotImplementedError
+        url = web_utils.private_rest_url(path_url=CONSTANTS.OKX_ORDER_CANCEL_PATH)
+        response = {
+            "code": "1",
+            "msg": "All operations failed",
+            "data": [
+                {
+                    "clOrdId": order.client_order_id,
+                    "ordId": order.exchange_order_id or "dummyOrdId",
+                    "sCode": CONSTANTS.RET_CODE_ORDER_DOES_NOT_EXIST,
+                    "sMsg": CONSTANTS.ORDER_NOT_EXIST_MESSAGE,
+                }
+            ],
+        }
+        mock_api.post(url, body=json.dumps(response), callback=callback)
+        return url
 
     def configure_order_not_found_error_order_status_response(
             self, order: InFlightOrder, mock_api: aioresponses,
             callback: Optional[Callable] = lambda *args, **kwargs: None
     ) -> List[str]:
-        # Implement the expected not found response when enabling
-        # test_lost_order_removed_if_not_found_during_order_status_update
-        raise NotImplementedError
+        url = web_utils.private_rest_url(path_url=CONSTANTS.OKX_ORDER_DETAILS_PATH)
+        regex_url = re.compile(url + r"\?.*")
+        # OKX returns HTTP 200 with an empty data list when the order is unknown to the exchange.
+        response = {"code": "0", "msg": "", "data": []}
+        mock_api.get(regex_url, body=json.dumps(response), callback=callback)
+        return [url]
 
     def configure_completely_filled_order_status_response(
             self,
@@ -984,16 +1000,57 @@ class OkxExchangeTests(AbstractExchangeConnectorTests.ExchangeConnectorTests):
         self.assertFalse(self.exchange._is_request_exception_related_to_time_synchronizer(exception))
 
     @aioresponses()
-    def test_cancel_order_not_found_in_the_exchange(self, mock_api):
-        # Disabling this test because the connector has not been updated yet to validate
-        # order not found during cancellation (check _is_order_not_found_during_cancelation_error)
-        pass
+    def test_request_order_status_raises_not_found_when_data_is_empty(self, mock_api):
+        # OKX answers an order status query for an unknown order with HTTP 200 and an empty data list.
+        # _request_order_status must raise a recognizable "order not found" error instead of an opaque
+        # IndexError on data[0] (which previously made the connector re-poll lost orders forever).
+        self.exchange._set_current_timestamp(1640780000)
+        self.exchange.start_tracking_order(
+            order_id="11",
+            exchange_order_id="1234",
+            trading_pair=self.trading_pair,
+            order_type=OrderType.LIMIT,
+            trade_type=TradeType.BUY,
+            price=Decimal("10000"),
+            amount=Decimal("1"),
+        )
+        order = self.exchange.in_flight_orders["11"]
 
-    @aioresponses()
-    def test_lost_order_removed_if_not_found_during_order_status_update(self, mock_api):
-        # Disabling this test because the connector has not been updated yet to validate
-        # order not found during status update (check _is_order_not_found_during_status_update_error)
-        pass
+        url = web_utils.private_rest_url(path_url=CONSTANTS.OKX_ORDER_DETAILS_PATH)
+        regex_url = re.compile(url + r"\?.*")
+        mock_api.get(regex_url, body=json.dumps({"code": "0", "msg": "", "data": []}))
+
+        with self.assertRaises(IOError) as context:
+            self.async_run_with_timeout(self.exchange._request_order_status(tracked_order=order))
+
+        self.assertIn(CONSTANTS.ORDER_NOT_EXIST_MESSAGE, str(context.exception))
+        self.assertTrue(
+            self.exchange._is_order_not_found_during_status_update_error(context.exception)
+        )
+
+    def test_is_order_not_found_during_status_update_error(self):
+        not_found = IOError(f"{CONSTANTS.ORDER_NOT_EXIST_MESSAGE} (client_order_id: abc, code: 0)")
+        self.assertTrue(self.exchange._is_order_not_found_during_status_update_error(not_found))
+        self.assertFalse(
+            self.exchange._is_order_not_found_during_status_update_error(IOError("HTTP status is 500."))
+        )
+
+    def test_is_order_not_found_during_cancelation_error(self):
+        cancel_result = {
+            "code": "1",
+            "msg": "All operations failed",
+            "data": [{
+                "clOrdId": "",
+                "ordId": "3620481578386522112",
+                "sCode": CONSTANTS.RET_CODE_ORDER_DOES_NOT_EXIST,
+                "sMsg": CONSTANTS.ORDER_NOT_EXIST_MESSAGE,
+            }],
+        }
+        not_found = IOError(f"Error cancelling order someId: {cancel_result}")
+        self.assertTrue(self.exchange._is_order_not_found_during_cancelation_error(not_found))
+        # A generic cancel failure (e.g. sCode "1") must NOT be swallowed as "order not found".
+        generic = IOError("Error cancelling order someId: {'data': [{'sCode': '1', 'sMsg': 'Error'}]}")
+        self.assertFalse(self.exchange._is_order_not_found_during_cancelation_error(generic))
 
     def _order_cancelation_request_successful_mock_response(self, response_scode: int, order: InFlightOrder) -> Any:
         return {
