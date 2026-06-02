@@ -92,7 +92,13 @@ class OkxPerpetualAPIOrderBookDataSource(PerpetualAPIOrderBookDataSource):
         if not bool(self._trading_rules):
             resp = await self._request_trading_rules_info()
             for rule in resp["data"]:
-                self._trading_rules[rule["instId"]] = float(rule["ctVal"])
+                # Some instruments (notably half-listed ones on the demo/simulated environment) come back with
+                # an empty ctVal. Skip them instead of letting float('') abort the whole trading-rules init,
+                # which would leave the order book uninitialized and the connector permanently "not ready".
+                ct_val = rule.get("ctVal", "")
+                if ct_val in (None, ""):
+                    continue
+                self._trading_rules[rule["instId"]] = float(ct_val)
         return self._trading_rules
 
     async def _request_trading_rules_info(self) -> Dict[str, Any]:
@@ -120,9 +126,24 @@ class OkxPerpetualAPIOrderBookDataSource(PerpetualAPIOrderBookDataSource):
     # 3 - Get Funding Info REST
     async def get_funding_info(self, trading_pair: str) -> FundingInfo:
         funding_info_response = await self._request_complete_funding_info(trading_pair)
-        index_price = funding_info_response[0]["data"][0]
-        mark_price = funding_info_response[1]["data"][0]
-        funding_data = funding_info_response[2]["data"][0]
+        index_data = funding_info_response[0].get("data") or []
+        mark_data = funding_info_response[1].get("data") or []
+        funding_data_list = funding_info_response[2].get("data") or []
+        if not (index_data and mark_data and funding_data_list):
+            # Empty payloads typically mean the instrument does not exist on this environment (e.g. a pair
+            # unavailable on demo trading). Return NaN funding info instead of letting an IndexError crash the
+            # funding-info listener loop.
+            self.logger().warning(f"Incomplete funding info for {trading_pair}; the instrument may not exist.")
+            return FundingInfo(
+                trading_pair=trading_pair,
+                index_price=Decimal("NaN"),
+                mark_price=Decimal("NaN"),
+                next_funding_utc_timestamp=0,
+                rate=Decimal("0"),
+            )
+        index_price = index_data[0]
+        mark_price = mark_data[0]
+        funding_data = funding_data_list[0]
         funding_info = FundingInfo(
             trading_pair=trading_pair,
             index_price=Decimal(str(index_price["idxPx"])),

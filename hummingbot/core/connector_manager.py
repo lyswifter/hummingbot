@@ -162,7 +162,14 @@ class ConnectorManager:
 
     def get_connector(self, connector_name: str) -> Optional[ExchangeBase]:
         """Get a connector by name."""
-        return self.connectors.get(connector_name)
+        connector = self.connectors.get(connector_name)
+        if connector is None:
+            # Sub-domain connectors (e.g. okx_perpetual_demo, binance_perpetual_testnet) are registered under
+            # their sub-domain key but report the parent name via .name, and trades are recorded under that
+            # parent name. Fall back to matching by .name so balance/PnL lookups keyed off the recorded market
+            # name still resolve instead of raising "Connector ... not found".
+            connector = next((c for c in self.connectors.values() if c.name == connector_name), None)
+        return connector
 
     def get_all_connectors(self) -> Dict[str, ExchangeBase]:
         """Get all active connectors."""

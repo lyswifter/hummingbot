@@ -210,6 +210,20 @@ class ConnectorManagerTest(IsolatedAsyncioWrapperTestCase):
         connector = self.connector_manager.get_connector("nonexistent")
         self.assertIsNone(connector)
 
+    def test_get_connector_falls_back_to_reported_name(self):
+        """Sub-domain connectors are registered under their sub-domain key but report the parent .name,
+        and trades are recorded under that parent name. Lookups by the reported name must still resolve."""
+        sub_connector = Mock(spec=ExchangeBase)
+        sub_connector.name = "okx_perpetual"
+        self.connector_manager.connectors["okx_perpetual_demo"] = sub_connector
+
+        # Exact registration key resolves directly.
+        self.assertEqual(sub_connector, self.connector_manager.get_connector("okx_perpetual_demo"))
+        # The reported .name resolves via fallback (this is what trade/balance monitors use).
+        self.assertEqual(sub_connector, self.connector_manager.get_connector("okx_perpetual"))
+        # A truly unknown name still returns None.
+        self.assertIsNone(self.connector_manager.get_connector("does_not_exist"))
+
     def test_get_all_connectors(self):
         """Test getting all connectors"""
         # Add multiple connectors

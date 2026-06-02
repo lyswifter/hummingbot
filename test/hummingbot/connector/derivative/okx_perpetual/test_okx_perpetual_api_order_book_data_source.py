@@ -477,6 +477,23 @@ class OKXPerpetualAPIOrderBookDataSourceTests(IsolatedAsyncioWrapperTestCase):
         self.assertEqual(int(float(funding_info_resp["data"][0]["nextFundingTime"]) * 1e-3), funding_info.next_funding_utc_timestamp)
         self.assertEqual(Decimal(funding_info_resp["data"][0]["fundingRate"]), funding_info.rate)
 
+    @aioresponses()
+    async def test_get_funding_info_returns_nan_when_instrument_missing(self, mock_api):
+        # Instruments unavailable on the environment (e.g. demo trading) return empty data; the connector
+        # must not crash with an IndexError but return NaN funding info instead.
+        empty_response = {"code": "0", "msg": "", "data": []}
+        for endpoint in (CONSTANTS.REST_INDEX_TICKERS, CONSTANTS.REST_MARK_PRICE, CONSTANTS.REST_FUNDING_RATE_INFO):
+            url = web_utils.get_rest_url_for_endpoint(endpoint[CONSTANTS.ENDPOINT], self.domain)
+            regex_url = re.compile(f"^{url}".replace(".", r"\.").replace("?", r"\?"))
+            mock_api.get(regex_url, body=json.dumps(empty_response))
+
+        funding_info: FundingInfo = await self.data_source.get_funding_info(self.trading_pair)
+
+        self.assertEqual(self.trading_pair, funding_info.trading_pair)
+        self.assertTrue(funding_info.index_price.is_nan())
+        self.assertTrue(funding_info.mark_price.is_nan())
+        self.assertEqual(Decimal("0"), funding_info.rate)
+
     @patch("aiohttp.ClientSession.ws_connect", new_callable=AsyncMock)
     async def test_subscribe_channels_successful(self, ws_connect_mock):
         ws_connect_mock.return_value = self.mocking_assistant.create_websocket_mock()
