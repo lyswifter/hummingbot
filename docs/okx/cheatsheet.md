@@ -1,6 +1,6 @@
 # OKX Demo 速查表（Cheatsheet）
 
-本项目当前实际在跑的 OKX **模拟盘**策略的常用命令。完整说明见 [`OKX_DEMO_TRADING.md`](./OKX_DEMO_TRADING.md)。
+本项目当前实际在跑的 OKX **模拟盘**策略的常用命令。完整说明见 [`trading-guide.md`](./trading-guide.md)。
 
 ---
 

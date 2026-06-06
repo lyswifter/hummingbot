@@ -12,6 +12,7 @@ The Hummingbot codebase is free and publicly available under the Apache 2.0 open
 
 ## Quick Links
 
+* [Project Docs (this repo)](./docs/README.md): OKX 接入、SmartGrid 网格策略、HFT 笔记、开发环境等本仓库自定义文档
 * [Website and Docs](https://hummingbot.org): Official Hummingbot website and documentation
 * [Installation](https://hummingbot.org/installation/): Install Hummingbot on various platforms
 * [Discord](https://discord.gg/hummingbot): The main gathering spot for the global Hummingbot community

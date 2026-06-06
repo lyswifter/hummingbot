@@ -21,7 +21,7 @@
 ## Development Environment Setup
 
 ### IDE Configuration
-If you're using VS Code or Cursor IDE, please refer to our [VS Code/Cursor Setup Guide](./CURSOR_VSCODE_SETUP.md) for detailed instructions on setting up your development environment, including:
+If you're using VS Code or Cursor IDE, please refer to our [VS Code/Cursor Setup Guide](./docs/dev/editor-setup.md) for detailed instructions on setting up your development environment, including:
 - VS Code/Cursor settings configuration
 - Debugging setup
 - Test discovery configuration
